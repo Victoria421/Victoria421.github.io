@@ -1,10 +1,12 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
+from opencc import OpenCC
 import time
 import re
-from opencc import OpenCC
+from datetime import datetime
 
+# 🔍 抓取微博娛樂熱搜前十
 def fetch_weibo_ent_hotsearch():
     options = Options()
     options.add_argument("--headless")
@@ -17,49 +19,56 @@ def fetch_weibo_ent_hotsearch():
 
     soup = BeautifulSoup(html, "html.parser")
     rows = soup.select("table tbody tr")[:10]
-
-    cc = OpenCC('s2t')  # 簡體轉繁體
+    cc = OpenCC('s2t')
     hotsearch_list = []
+
     for tr in rows:
         a = tr.select_one("td.td-02 a")
         if a:
-            text_simplified = a.get_text(strip=True)
-            text_traditional = cc.convert(text_simplified)
+            text = cc.convert(a.get_text(strip=True))
             link = "https://s.weibo.com" + a['href']
-            hotsearch_list.append((text_traditional, link))
+            hotsearch_list.append((text, link))
 
     return hotsearch_list
 
+# 🔧 產生 <ol> HTML 列表
 def generate_html(hotsearch_list):
-    # 改成有序列表，數字序列，自動靠左
-    html_content = '<ol style="text-align:left; padding-left:20px;">\n'
+    html = '<ol style="text-align:left; padding-left:20px;">\n'
     for text, link in hotsearch_list:
-        html_content += f'  <li><a href="{link}" target="_blank">{text}</a></li>\n'
-    html_content += '</ol>'
-    return html_content
+        html += f'  <li><a href="{link}" target="_blank">{text}</a></li>\n'
+    html += '</ol>'
+    return html
 
-
-def update_html_file(html_file_path, new_list_html):
-    with open(html_file_path, 'r', encoding='utf-8') as f:
+# 🔧 更新指定 HTML 區塊
+def update_html_file(html_path, list_html, update_time):
+    with open(html_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    # 用 id="weibo-hotsearch-list" 區塊做替換
-    pattern = re.compile(
+    # 替換 weibo-hotsearch-list
+    list_pattern = re.compile(
         r'(<div[^>]+id=["\']weibo-hotsearch-list["\'][^>]*>)(.*?)(</div>)',
         re.DOTALL
     )
+    content = list_pattern.sub(r'\1' + list_html + r'\3', content)
 
-    new_content = pattern.sub(r'\1' + new_list_html + r'\3', content)
+    # 替換更新時間
+    time_pattern = re.compile(
+        r'(<p[^>]+id=["\']last-updated-time["\'][^>]*>)(.*?)(</p>)',
+        re.DOTALL
+    )
+    time_html = f'<p id="last-updated-time">資料更新時間：{update_time}</p>'
+    content = time_pattern.sub(time_html, content)
 
-    with open(html_file_path, 'w', encoding='utf-8') as f:
-        f.write(new_content)
+    with open(html_path, 'w', encoding='utf-8') as f:
+        f.write(content)
 
-    print(f"已更新 {html_file_path} 中的微博熱搜文娛榜內容。")
-
+# 🚀 主程式
 if __name__ == "__main__":
-    hotsearch_list = fetch_weibo_ent_hotsearch()
-    if hotsearch_list:
-        new_html = generate_html(hotsearch_list)
-        update_html_file("index.html", new_html)
+    hotsearch = fetch_weibo_ent_hotsearch()
+    if hotsearch:
+        list_html = generate_html(hotsearch)
+        update_time = datetime.now().strftime('%Y-%m-%d %H:%M')
+        update_html_file("elements.html", list_html, update_time)
+        print("✅ 熱搜與時間更新完成")
     else:
-        print("抓取微博文娛榜前十失敗")
+        print("❌ 抓取失敗")

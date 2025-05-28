@@ -27,10 +27,22 @@
 <div id="main">
   <!-- Content -->
   <section id="content" class="main">
+
+    <h3>📌 執行前提醒</h3>
+    <ul>
+      <li>須先安裝並設定好 <code>chromedriver</code>，版本需與 Chrome 瀏覽器匹配。</li>
+      <li>安裝套件：<code>pip install selenium beautifulsoup4 opencc-python-reimplemented</code></li>
+      <li>確保 <code>index.html</code> 含有 id="weibo-hotsearch-list" 的 <code>&lt;div&gt;</code> 區塊。</li>
+    </ul>
+
     <header class="major">
       <h2>使用 Selenium 抓取微博文娛熱搜榜</h2>
       <p>以下介紹完整 Python 爬蟲程式碼與各部分說明</p>
     </header>
+
+    <div style="text-align: center;">
+      <img src="images/weibo.png" alt="微博圖示" style="max-width: 200px; height: auto; margin-bottom: 20px;">
+    </div>
 
     <h3>📌 1. 套件與設定</h3>
     <pre><code class="language-python"># 載入必要套件：
@@ -41,138 +53,119 @@ from bs4 import BeautifulSoup   # 解析 HTML
 import time                # time - 控制等待時間
 import re                  # 正則表達式處理 HTML
 from opencc import OpenCC  # 簡轉繁
-
-
 </code></pre>
 
     <h3>🧩 2. 爬蟲主函式 fetch_weibo_ent_hotsearch()</h3>
     <pre><code class="language-python">def fetch_weibo_ent_hotsearch():
     options = Options()
     options.add_argument("--headless")  # 無頭模式，不開啟瀏覽器視窗
-    driver = webdriver.Chrome(options=options)  # 啟動 Chrome
+    driver = webdriver.Chrome(options=options)
     url = "https://s.weibo.com/top/summary?cate=ent"
-    driver.get(url)  # 開啟微博娛樂熱搜榜頁面
-    time.sleep(3)    # 等待 3 秒，確保頁面載入完成
-    html = driver.page_source  # 取得網頁 HTML 原始碼
-    driver.quit()  # 關閉瀏覽器
+    driver.get(url)
+    time.sleep(3)
+    html = driver.page_source
+    driver.quit()
 
-    soup = BeautifulSoup(html, "html.parser")  # 解析 HTML
-    rows = soup.select("table tbody tr")[:10]  # 取前 10 筆熱搜資料
+    soup = BeautifulSoup(html, "html.parser")
+    rows = soup.select("table tbody tr")[:10]
 
-    cc = OpenCC('s2t')  # 簡體轉繁體轉換器
+    cc = OpenCC('s2t')
     hotsearch_list = []
     for tr in rows:
         a = tr.select_one("td.td-02 a")
         if a:
-            text_simplified = a.get_text(strip=True)  # 取簡體字文字
-            text_traditional = cc.convert(text_simplified)  # 轉繁體字
-            link = "https://s.weibo.com" + a['href']  # 拼接完整連結
-            hotsearch_list.append((text_traditional, link))  # 加入清單
-
-    return hotsearch_list  # 回傳熱搜列表
+            text_simplified = a.get_text(strip=True)
+            text_traditional = cc.convert(text_simplified)
+            link = "https://s.weibo.com" + a['href']
+            hotsearch_list.append((text_traditional, link))
+    return hotsearch_list
 </code></pre>
-    <p>這個函式用 Selenium 開動態網頁，等網頁載入後用 BeautifulSoup 擷取前十條熱搜，並用 OpenCC 轉成繁體字，最後回傳 (標題, 連結) 的列表。</p>
 
     <h3>📝 3. 生成 HTML 清單 generate_html()</h3>
     <pre><code class="language-python">def generate_html(hotsearch_list):
-    html_content = '&lt;ol style="text-align:left; padding-left:20px;"&gt;\n'  # 有序列表，左對齊
+    html_content = '&lt;ol style="text-align:left; padding-left:20px;"&gt;\n'
     for text, link in hotsearch_list:
-        html_content += f'  &lt;li&gt;&lt;a href="{link}" target="_blank"&gt;{text}&lt;/a&gt;&lt;/li&gt;\n'  # 加入超連結
+        html_content += f'  &lt;li&gt;&lt;a href="{link}" target="_blank"&gt;{text}&lt;/a&gt;&lt;/li&gt;\n'
     html_content += '&lt;/ol&gt;'
-    return html_content  # 回傳組合好的 HTML 字串
+    return html_content
 </code></pre>
-    <p>這函式把爬到的熱搜列表做成有序的 HTML 列表，方便插入網頁。</p>
 
     <h3>🔧 4. 更新網頁內容 update_html_file()</h3>
     <pre><code class="language-python">def update_html_file(html_file_path, new_list_html):
     with open(html_file_path, 'r', encoding='utf-8') as f:
-        content = f.read()  # 讀取原始 HTML
+        content = f.read()
 
     pattern = re.compile(
-        r'(&lt;div[^&gt;]+id=["\']weibo-hotsearch-list["\'][^&gt;]*&gt;)(.*?)(&lt;/div&gt;)',
+        r'(&lt;div[^&gt;]+id=["\']weibo-hotsearch-list["\'][^&gt;]*&gt;)(.*?)(\s*&lt;/div&gt;)',
         re.DOTALL
     )
-    new_content = pattern.sub(r'\1' + new_list_html + r'\3', content)  # 用新內容替換指定區塊
+    new_content = pattern.sub(r'\1\n' + new_list_html + r'\n\3', content)
 
     with open(html_file_path, 'w', encoding='utf-8') as f:
-        f.write(new_content)  # 寫回檔案
+        f.write(new_content)
 </code></pre>
-    <p>使用正則找到網頁中 id="weibo-hotsearch-list" 的區塊並替換成新爬到的熱搜列表 HTML，完成網頁內容更新。</p>
 
     <h3>🚀 5. 主程式執行</h3>
-    <pre><code class="language-python">if __name__ == "__main__":
-    hotsearch_list = fetch_weibo_ent_hotsearch()  # 抓取熱搜
+    <pre><code class="language-python">def main():
+    hotsearch_list = fetch_weibo_ent_hotsearch()
     if hotsearch_list:
-        new_html = generate_html(hotsearch_list)  # 生成 HTML
-        update_html_file("index.html", new_html)  # 更新 index.html
+        new_html = generate_html(hotsearch_list)
+        update_html_file("index.html", new_html)
     else:
-        print("抓取微博文娛榜前十失敗")  # 失敗提示
+        print("抓取微博文娛榜前十失敗")
+
+if __name__ == "__main__":
+    main()
 </code></pre>
-    <p>整個爬蟲程式從執行到更新頁面一次完成，方便自動化更新微博熱搜文娛榜。</p>
 
-    <h3>📌 執行前提醒</h3>
-    <ul>
-      <li>須先安裝並設定好 <code>chromedriver</code>，版本需與 Chrome 瀏覽器匹配。</li>
-      <li>須安裝相關 Python 套件：
-        <code>pip install selenium beautifulsoup4 opencc-python-reimplemented</code>
-      </li>
-      <li>確保 <code>index.html</code> 中有 
-        <code>&lt;div id="weibo-hotsearch-list"&gt;...&lt;/div&gt;</code> 作為熱搜列表替換區塊。
-      </li>
-    </ul>
-
+    
   </section>
 </div>
 
-
-
-
-																		
-
-				<!-- Footer -->
-					<footer id="footer">
-						<section>
-							<h2>MBTI</h2>
-							<p>ISFJ 守護者（Defender）<br><br>責任感強：對工作投入且守時守信，值得信賴。<br>
-
+<!-- Footer -->
+<footer id="footer">
+  <section>
+    <h2>MBTI</h2>
+    <p>ISFJ 守護者（Defender）<br><br>責任感強：對工作投入且守時守信，值得信賴。<br>
 細心周到：擅長處理細節，適合需要精準與耐心的工作。<br>
-
 樂於助人：主動協助同事，能提升團隊合作氣氛。<br>
-
 情緒穩定：遇事冷靜，能維持職場穩定與和諧。<br>
-
 忠誠可靠：對公司與主管忠心，願意長期投入。</p>
-						</section>
-						<section>
-							<h2>聯絡方式</h2>
-							<dl class="alt">
-								<dt>Address</dt>
-								<dd>新北市新店區xxxxxxx</dd>
-								<dt>Phone</dt>
-								<dd>0905xxxxxx</dd>
-								<dt>Email</dt>
-								<dd><a href="#">lee3887765@gmail.com</a></dd>
-							</dl>
-							<ul class="icons">
-								<li><a href="#" class="icon brands fa-twitter alt"><span class="label">Twitter</span></a></li>
-								<li><a href="#" class="icon brands fa-facebook-f alt"><span class="label">Facebook</span></a></li>
-								<li><a href="#" class="icon brands fa-instagram alt"><span class="label">Instagram</span></a></li>
-								<li><a href="#" class="icon brands fa-github alt"><span class="label">GitHub</span></a></li>
-								<li><a href="#" class="icon brands fa-dribbble alt"><span class="label">Dribbble</span></a></li>
-							</ul>
-						</section>
-						<p class="copyright">&copy; 李秈芝：程式碼解析					</footer>
+  </section>
+  <section>
+    <h2>聯絡方式</h2>
+    <dl class="alt">
+      <dt>Address</dt>
+      <dd>新北市新店區xxxxxxx</dd>
+      <dt>Phone</dt>
+      <dd>0905xxxxxx</dd>
+      <dt>Email</dt>
+      <dd><a href="#">lee3887765@gmail.com</a></dd>
+    </dl>
+    <ul class="icons">
+      <li><a href="#" class="icon brands fa-twitter alt"><span class="label">Twitter</span></a></li>
+      <li><a href="#" class="icon brands fa-facebook-f alt"><span class="label">Facebook</span></a></li>
+      <li><a href="#" class="icon brands fa-instagram alt"><span class="label">Instagram</span></a></li>
+      <li><a href="#" class="icon brands fa-github alt"><span class="label">GitHub</span></a></li>
+      <li><a href="#" class="icon brands fa-dribbble alt"><span class="label">Dribbble</span></a></li>
+    </ul>
+  </section>
+  <p class="copyright">&copy; 李秈芝：程式碼解析</p>
+</footer>
 
-			</div>
+</div>
 
-		<!-- Scripts -->
-			<script src="assets/js/jquery.min.js"></script>
-			<script src="assets/js/jquery.scrollex.min.js"></script>
-			<script src="assets/js/jquery.scrolly.min.js"></script>
-			<script src="assets/js/browser.min.js"></script>
-			<script src="assets/js/breakpoints.min.js"></script>
-			<script src="assets/js/util.js"></script>
-			<script src="assets/js/main.js"></script>
+<!-- Scripts -->
+<script src="assets/js/jquery.min.js"></script>
+<script src="assets/js/jquery.scrollex.min.js"></script>
+<script src="assets/js/jquery.scrolly.min.js"></script>
+<script src="assets/js/browser.min.js"></script>
+<script src="assets/js/breakpoints.min.js"></script>
+<script src="assets/js/util.js"></script>
+<script src="assets/js/main.js"></script>
 
-	</body>
+<a href="index.html" class="back-to-home">回首頁</a>
+
+
+</body>
 </html>
